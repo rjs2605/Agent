@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How it works · LeadPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="nav"></div>
+  <main class="max-w-5xl mx-auto px-5 pb-24">
+    <header class="pt-12 pb-8 fade-in">
+      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight"><span class="gradient-text">How LeadPulse works</span></h1>
+      <p class="muted mt-3 max-w-2xl">LeadPulse is an AI sales assistant. It researches companies for you and every morning shows only the few worth contacting today, with the reason why now, the right person and a ready-to-send message.</p>
+      <button class="btn mt-5" id="guide">▶ Show the quick tour again</button>
+    </header>
+
+    <section class="grid md:grid-cols-5 gap-3" id="steps"></section>
+
+    <section class="grid md:grid-cols-2 gap-5 mt-10">
+      <div class="glass p-6 reveal">
+        <h2 class="font-bold text-lg">📊 How the score works (0-100)</h2>
+        <ul class="mt-3 space-y-2 text-sm">
+          <li><b>Fit (40)</b>: right industry (10) + based in India (5) + right company size (15) + how much they need what you sell (10, judged by AI).</li>
+          <li><b>Timing (40)</b>: fresh real signals in the last 90 days. Newer signals give more points.</li>
+          <li><b>Reachability (20)</b>: named person found (20), only a role (10), nothing (0).</li>
+        </ul>
+        <p class="muted text-xs mt-3">Change your industries, company size and roles in Settings → Target customer.</p>
+      </div>
+      <div class="glass p-6 reveal" style="animation-delay:80ms">
+        <h2 class="font-bold text-lg">⚡ Signal or noise?</h2>
+        <p class="text-sm mt-3"><b style="color:var(--good)">Signals</b> (count for timing): funding, new leader, hiring spike, new product, new location, big customer win, pricing change.</p>
+        <p class="text-sm mt-2"><b class="muted">Noise</b> (ignored): blog posts, design or text changes, footer, cookie banner, small edits.</p>
+      </div>
+      <div class="glass p-6 reveal" style="animation-delay:120ms">
+        <h2 class="font-bold text-lg">✅ Can I trust the data?</h2>
+        <ul class="mt-3 space-y-2 text-sm">
+          <li>Every fact has a source link. Facts without a real source are removed.</li>
+          <li>Source order: company website › recent news › directories › AI guess.</li>
+          <li>Confidence badge: <span class="badge badge-high">high</span> official or 2+ sources, <span class="badge badge-medium">medium</span> one good source, <span class="badge badge-low">low</span> old or guessed.</li>
+          <li>When sources disagree you see a <span class="badge badge-conflict">Conflicting</span> badge with both values.</li>
+        </ul>
+      </div>
+      <div class="glass p-6 reveal" style="animation-delay:160ms">
+        <h2 class="font-bold text-lg">🗓 Today's top leads rule</h2>
+        <ul class="mt-3 space-y-2 text-sm">
+          <li>At most 5 companies, highest score first.</li>
+          <li>Each must have a real signal in the last 30 days.</li>
+          <li>Done / Not relevant hides a company. Snooze hides it for 7 days.</li>
+          <li>If fewer than 5 qualify, fewer are shown. No weak fillers.</li>
+        </ul>
+      </div>
+      <div class="glass p-6 reveal md:col-span-2" style="animation-delay:200ms">
+        <h2 class="font-bold text-lg">🧰 Everyday controls</h2>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3 text-sm">
+          <div><b>Add</b>: paste websites or upload a CSV (100+ is fine). You see a preview first.</div>
+          <div><b>⏸ Pause</b>: pause one company, or <b>Pause all</b> to stop everything.</div>
+          <div><b>⬇ Export</b>: one company or all, as CSV, Excel or PDF.</div>
+          <div><b>🗑 Delete</b>: removes a company and all its data (asks first).</div>
+          <div><b>⏰ Automation</b>: runs by itself every day at the time you choose (Settings → Automation).</div>
+          <div><b>🔌 Integrations</b>: change API keys and backups anytime (Settings → Integrations).</div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    initNav("how");
+    const STEPS = [
+      ["📥", "Add", "You add company websites."],
+      ["🌐", "Read", "LeadPulse reads their website pages and recent news."],
+      ["🧠", "Understand", "AI pulls out facts (with sources), writes a brief and spots signals."],
+      ["🎯", "Score & find", "Scores the company and finds the right person to contact."],
+      ["✉️", "Act", "Writes a short personal message. The best 5 appear on Today."],
+    ];
+    document.getElementById("steps").innerHTML = STEPS.map(([i, t, d], n) => `
+      <div class="glass p-5 reveal card" style="animation-delay:${n * 90}ms">
+        <div class="text-3xl">${i}</div><div class="muted text-xs font-bold mt-3">STEP ${n + 1}</div>
+        <div class="font-bold mt-0.5">${t}</div><div class="muted text-sm mt-1">${d}</div></div>`).join("");
+    attachSpotlight();
+    document.getElementById("guide").onclick = () => maybeShowGuide(true);
+  </script>
+</body>
+</html>

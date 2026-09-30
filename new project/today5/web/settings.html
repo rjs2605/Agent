@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings · LeadPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="nav"></div>
+  <main class="max-w-6xl mx-auto px-5 pb-24">
+    <header class="pt-12 pb-8 fade-in">
+      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight"><span class="gradient-text">Settings</span></h1>
+      <p class="muted mt-3 max-w-2xl">Connect your API keys (each with a backup), see and control the daily automation, and describe who you sell to. Changes apply immediately. No redeploy needed.</p>
+    </header>
+
+    <div class="tabs fade-in" id="tabs"><div class="tab-ink" id="ink"></div>
+      <button class="tab active" data-tab="integrations">🔌 Integrations</button>
+      <button class="tab" data-tab="automation">⏰ Automation</button>
+      <button class="tab" data-tab="target">🎯 Target customer</button>
+    </div>
+    <div class="mt-6" id="panels"><div class="skeleton" style="height:320px"></div></div>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>
+    initNav("settings");
+    let S = null, active = "integrations";
+    const panels = document.getElementById("panels");
+
+    // ---------- Integrations ----------
+    function keyField(field, label, provider, hint) {
+      const f = S.integrations[field];
+      const src = { website: "saved here", environment: "from .env / Vercel", missing: "not set", default: "default" }[f.source];
+      return `<div class="mt-4">
+        <label class="field-label" for="${field}">${label} ${hint ? help(hint) : ""}</label>
+        <div class="flex gap-2">
+          <input id="${field}" type="password" placeholder="${f.set ? f.value : "Paste key…"}" autocomplete="off" />
+          <button class="btn btn-sm" data-test="${provider}" data-key="${field}">Test</button>
+          ${f.source === "website" ? `<button class="btn btn-sm btn-bad" data-clear="${field}" title="Remove the saved key">✕</button>` : ""}
+        </div>
+        <div class="flex items-center gap-2 mt-1.5 text-xs">
+          <span class="badge ${f.set ? "badge-high" : "badge-low"}"><span class="dot"></span>${f.set ? "connected" : "missing"}</span>
+          <span class="muted">${src}</span>
+          <span class="test-result muted" data-result="${field}"></span>
+        </div>
+      </div>`;
+    }
+    function modelField(field, label, hint) {
+      const f = S.integrations[field];
+      return `<div class="mt-4"><label class="field-label" for="${field}">${label} ${help(hint)}</label>
+        <input id="${field}" type="text" value="${esc(f.value)}" list="${field}-list" />
+        <datalist id="${field}-list"></datalist>
+        <div class="muted text-xs mt-1">Press <b>Test</b> on the key to load the list of available models.</div></div>`;
+    }
+    function primarySelect(field, label, opts) {
+      const v = S.integrations[field].value;
+      return `<label class="field-label" for="${field}">${label}</label>
+        <select id="${field}">${opts.map(([k, l]) => `<option value="${k}" ${v === k ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+    }
+
+    function integrationsPanel() {
+      return `<div class="grid lg:grid-cols-3 gap-5">
+        <div class="glass p-6 reveal">
+          <div class="flex items-center justify-between"><h3 class="font-bold text-lg">🧠 AI</h3><span class="badge badge-info">writes briefs & messages</span></div>
+          <p class="muted text-sm mt-1">If the first AI fails or reaches its free limit, the next one takes over automatically.</p>
+          <div class="mt-4">${primarySelect("ai_primary", "Use first", [["gemini", "Gemini → then Groq"], ["groq", "Groq → then Gemini"]])}</div>
+          <div class="mt-5 pt-4" style="border-top:1px solid var(--line)"><div class="font-semibold">Google Gemini</div>
+            ${keyField("gemini_key", "Gemini key", "gemini", "Free key from aistudio.google.com → Get API key.")}
+            ${keyField("gemini_key_backup", "Gemini backup key (optional)", "gemini_backup", "A second free key (another Google account) used when the first one hits its daily limit.")}
+            ${modelField("gemini_model", "Gemini model", "gemini-flash-latest always points to Google's newest Flash model, so it keeps working when old models are retired.")}
+          </div>
+          <div class="mt-5 pt-4" style="border-top:1px solid var(--line)"><div class="font-semibold">Groq</div>
+            ${keyField("groq_key", "Groq key", "groq", "Free key from console.groq.com → API Keys → Create API Key.")}
+            ${keyField("groq_key_backup", "Groq backup key (optional)", "groq_backup", "A second Groq key used when the first one hits its limit.")}
+            ${modelField("groq_model", "Groq model", "The Groq model to use, e.g. llama-3.3-70b-versatile.")}
+          </div>
+        </div>
+
+        <div class="glass p-6 reveal" style="animation-delay:80ms">
+          <div class="flex items-center justify-between"><h3 class="font-bold text-lg">🔎 Web & news search</h3><span class="badge badge-info">finds news & people</span></div>
+          <p class="muted text-sm mt-1">Finds recent news and LinkedIn profiles. If one provider fails, the other is used.</p>
+          <div class="mt-4">${primarySelect("search_primary", "Use first", [["tavily", "Tavily → then Jina Search"], ["jina", "Jina Search → then Tavily"]])}</div>
+          <div class="mt-5 pt-4" style="border-top:1px solid var(--line)"><div class="font-semibold">Tavily</div>
+            ${keyField("tavily_key", "Tavily key", "tavily", "Free 1,000 searches a month from app.tavily.com.")}
+            ${keyField("tavily_key_backup", "Tavily backup key (optional)", "tavily_backup", "A second Tavily key used when the first runs out of credits.")}
+          </div>
+          <div class="mt-5 pt-4" style="border-top:1px solid var(--line)"><div class="font-semibold">Jina Search</div>
+            <p class="muted text-xs mt-1">Uses the Jina key from the Website reader card.</p>
+            <button class="btn btn-sm mt-3" data-test="jina_search" data-key="jina_key">Test Jina Search</button>
+            <span class="test-result muted text-xs ml-2" data-result="jina_search"></span>
+          </div>
+        </div>
+
+        <div class="glass p-6 reveal" style="animation-delay:160ms">
+          <div class="flex items-center justify-between"><h3 class="font-bold text-lg">🌐 Website reader</h3><span class="badge badge-info">reads company sites</span></div>
+          <p class="muted text-sm mt-1">Reads each company's home, about, careers, blog and pricing pages.</p>
+          ${keyField("jina_key", "Jina key", "jina", "Optional. Free key from jina.ai gives higher limits. Also used for Jina Search.")}
+          <div class="banner banner-info mt-5">Backup: if Jina cannot read a page, LeadPulse fetches the page directly. No key needed.</div>
+          <div class="banner banner-info mt-3">🗄 Database (Supabase) is set only in .env.local / Vercel for safety.</div>
+        </div>
+      </div>
+      <div class="flex justify-end mt-5"><button class="btn btn-primary" id="save-integrations">Save integrations</button></div>`;
+    }
+
+    // ---------- Automation ----------
+    function automationPanel() {
+      const a = S.automation;
+      const runs = S.runs || [];
+      return `<div class="grid lg:grid-cols-3 gap-5">
+        <div class="glass p-6 reveal lg:col-span-1">
+          <h3 class="font-bold text-lg">Daily automation</h3>
+          <p class="muted text-sm mt-1">Every morning LeadPulse re-checks companies for new signals and continues any research still waiting, so Today is fresh when you open it.</p>
+          <div class="mt-5 space-y-3 text-sm">
+            <div class="flex justify-between gap-3"><span class="muted">Schedule</span><b>${esc(a.schedule)}</b></div>
+            <div class="flex justify-between gap-3"><span class="muted">Next run</span><b>${new Date(a.next_run).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</b></div>
+            <div class="flex justify-between gap-3"><span class="muted">Runs on</span><b class="text-right">${esc(a.runner)}</b></div>
+            <div class="flex justify-between gap-3"><span class="muted">Status</span>${a.paused_all ? `<span class="badge badge-medium">paused (Pause all)</span>` : a.daily_enabled ? `<span class="badge badge-high">on</span>` : `<span class="badge badge-low">off</span>`}</div>
+          </div>
+          <div class="mt-6 pt-5 flex items-center justify-between gap-3" style="border-top:1px solid var(--line)">
+            <div><div class="font-semibold text-sm">Run every day</div><div class="muted text-xs">Turn the daily run on or off</div></div>
+            <label class="switch"><input type="checkbox" id="daily_enabled" ${a.daily_enabled ? "checked" : ""}><span></span></label>
+          </div>
+          <div class="mt-4">
+            <label class="field-label" for="run_time">Run time (IST) ${help("The time the daily automation starts, in Indian Standard Time.")}</label>
+            <input type="time" id="run_time" value="${esc(a.run_time || "08:00")}" />
+          </div>
+          <div class="mt-4">
+            <label class="field-label" for="refresh_limit">Companies re-checked per day ${help("Each re-check uses about 3 AI calls. Keep this small on free AI plans.")}</label>
+            <input type="number" id="refresh_limit" min="0" max="100" value="${a.refresh_limit}" />
+          </div>
+          <div class="flex flex-wrap gap-2 mt-5">
+            <button class="btn btn-primary" id="save-automation">Save</button>
+            <button class="btn" id="run-now">▶ Run now</button>
+          </div>
+        </div>
+        <div class="glass p-6 reveal lg:col-span-2" style="animation-delay:80ms">
+          <h3 class="font-bold text-lg">How it works</h3>
+          <ol class="mt-3 space-y-2 text-sm list-decimal pl-5">
+            <li>${S.serverless
+              ? `At your run time (${esc(a.schedule.replace("Every day at ", ""))}) the automation becomes due. Online it starts the first time the app is opened after that time, and Vercel checks once a day around 08:00 IST as a safety net.`
+              : `At your run time (${esc(a.schedule.replace("Every day at ", ""))}) this computer starts it, while <code>python app.py</code> is running.`}</li>
+            <li>Researched companies not checked in 24 hours are queued again (up to the limit you set), oldest first.</li>
+            <li>The queue is researched one company at a time. New signals (funding, hiring, new leader…) raise the Timing score.</li>
+            <li>Paused companies and <b>Pause all</b> are respected. If the free AI limit is reached, it continues on the next run.</li>
+          </ol>
+          ${S.serverless ? `<details class="mt-5 banner banner-info"><summary class="cursor-pointer font-semibold">Want it to start at the exact minute online, even when nobody opens the app? (free, optional)</summary>
+            <ol class="mt-3 space-y-1 list-decimal pl-5 text-sm">
+              <li>Sign up free at <b>cron-job.org</b> → <b>Create cronjob</b>.</li>
+              <li>URL: <code>${esc(location.origin)}/api/cron/daily</code>, schedule: <b>every 15 minutes</b>.</li>
+              <li>Advanced → Headers → add <code>Authorization</code> = <code>Bearer YOUR_CRON_SECRET</code> (the CRON_SECRET value from Vercel).</li>
+              <li>Save. The app only runs once a day, at your run time; the other calls do nothing.</li>
+            </ol></details>` : ""}
+          <h3 class="font-bold text-lg mt-7">Run history</h3>
+          <div class="overflow-x-auto mt-2"><table><thead><tr><th>Started</th><th>Trigger</th><th>Result</th></tr></thead><tbody>
+            ${runs.length ? runs.map((r) => `<tr><td class="whitespace-nowrap">${new Date(r.started_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+              <td><span class="badge ${r.trigger === "manual" ? "badge-info" : "badge-high"}">${r.trigger === "manual" ? "Run now" : "Daily"}</span></td>
+              <td class="text-sm">${esc(r.note || (r.finished_at ? "done" : "running…"))}</td></tr>`).join("")
+              : `<tr><td colspan="3" class="muted text-sm">No runs yet. The first one happens at the next scheduled time, or press Run now.</td></tr>`}
+          </tbody></table></div>
+        </div>
+      </div>`;
+    }
+
+    // ---------- Target customer ----------
+    function targetPanel() {
+      const t = S.target;
+      return `<div class="glass p-6 reveal">
+        <p class="muted text-sm">This decides how companies are scored (Fit) and who LeadPulse looks for. Changes apply to the next research run.</p>
+        <div class="grid md:grid-cols-2 gap-5 mt-5">
+          <div class="md:col-span-2"><label class="field-label" for="product">What you sell ${help("One or two sentences. Used to judge pain match and to write the messages.")}</label>
+            <textarea id="product" rows="3">${esc(t.product)}</textarea></div>
+          <div class="md:col-span-2"><label class="field-label" for="description">Ideal customer</label>
+            <input id="description" type="text" value="${esc(t.description)}" /></div>
+          <div><label class="field-label" for="min_staff">Min staff</label><input id="min_staff" type="number" value="${t.min_staff}" /></div>
+          <div><label class="field-label" for="max_staff">Max staff</label><input id="max_staff" type="number" value="${t.max_staff}" /></div>
+          <div class="md:col-span-2"><label class="field-label" for="industries">Target industries (comma separated) ${help("A company gets industry points if its description contains any of these words.")}</label>
+            <textarea id="industries" rows="3">${esc(t.industries.join(", "))}</textarea></div>
+          <div><label class="field-label" for="roles">People to contact, best first (comma separated)</label>
+            <textarea id="roles" rows="3">${esc(t.roles.join(", "))}</textarea></div>
+          <div><label class="field-label" for="small_roles">For small companies (comma separated)</label>
+            <textarea id="small_roles" rows="3">${esc(t.small_roles.join(", "))}</textarea></div>
+          <div><label class="field-label" for="small_max_staff">"Small company" means fewer staff than</label>
+            <input id="small_max_staff" type="number" value="${t.small_max_staff}" /></div>
+        </div>
+        <div class="flex justify-end mt-6"><button class="btn btn-primary" id="save-target">Save target customer</button></div>
+      </div>`;
+    }
+
+    function render() {
+      const fn = { integrations: integrationsPanel, automation: automationPanel, target: targetPanel }[active];
+      panels.innerHTML = fn();
+      moveInk();
+    }
+    function moveInk() {
+      const t = document.querySelector(".tab.active"), ink = document.getElementById("ink");
+      ink.style.left = t.offsetLeft + "px"; ink.style.width = t.offsetWidth + "px";
+    }
+    window.addEventListener("resize", moveInk);
+    document.getElementById("tabs").addEventListener("click", (e) => {
+      const t = e.target.closest("[data-tab]");
+      if (!t) return;
+      active = t.dataset.tab;
+      document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === t));
+      history.replaceState(null, "", "#" + active);
+      render();
+    });
+
+    const val = (id) => document.getElementById(id).value;
+    panels.addEventListener("click", async (e) => {
+      const test = e.target.closest("[data-test]");
+      if (test) {
+        const field = test.dataset.key, provider = test.dataset.test;
+        const out = document.querySelector(`[data-result="${provider === "jina_search" ? "jina_search" : field}"]`);
+        out.textContent = "testing…"; out.style.color = "";
+        const modelId = provider.startsWith("gemini") ? "gemini_model" : provider.startsWith("groq") ? "groq_model" : null;
+        try {
+          const r = await api("/api/integrations/test", { method: "POST", body: { provider, key: val(field), model: modelId ? val(modelId) : "" } });
+          out.textContent = (r.ok ? "✓ " : "✕ ") + r.message;
+          out.style.color = r.ok ? "var(--good)" : "var(--bad)";
+          if (r.models && modelId) document.getElementById(modelId + "-list").innerHTML = r.models.map((m) => `<option value="${esc(m)}">`).join("");
+        } catch (err) { out.textContent = "✕ " + err.message; out.style.color = "var(--bad)"; }
+        return;
+      }
+      const clear = e.target.closest("[data-clear]");
+      if (clear) {
+        if (!(await confirmBox("Remove this saved key?", "The key saved on this website is removed. If the same key is set in .env / Vercel, that one is used instead.", "Remove", true))) return;
+        S = await api("/api/settings/integrations", { method: "POST", body: { [clear.dataset.clear]: "__clear__" } });
+        toast("Key removed", "good"); render(); return;
+      }
+      if (e.target.id === "save-integrations") {
+        const body = {};
+        Object.keys(S.integrations).forEach((k) => { const el = document.getElementById(k); if (el) body[k] = el.value; });
+        try { S = await api("/api/settings/integrations", { method: "POST", body }); toast("Integrations saved", "good"); render(); }
+        catch (err) { toast(err.message, "error"); }
+      }
+      if (e.target.id === "save-automation") {
+        try { S = await api("/api/settings/automation", { method: "POST", body: { daily_enabled: document.getElementById("daily_enabled").checked, run_time: val("run_time"), refresh_limit: val("refresh_limit") } }); toast("Automation saved", "good"); render(); }
+        catch (err) { toast(err.message, "error"); }
+      }
+      if (e.target.id === "run-now") {
+        e.target.disabled = true; e.target.textContent = "Running…";
+        try { const r = await api("/api/automation/run", { method: "POST" }); toast(r.note || "Done", "good"); S = await api("/api/settings"); render(); }
+        catch (err) { toast(err.message, "error"); e.target.disabled = false; e.target.textContent = "▶ Run now"; }
+      }
+      if (e.target.id === "save-target") {
+        const body = { product: val("product"), description: val("description"), min_staff: val("min_staff"), max_staff: val("max_staff"),
+          industries: val("industries"), roles: val("roles"), small_roles: val("small_roles"), small_max_staff: val("small_max_staff") };
+        try { S = await api("/api/settings/target", { method: "POST", body }); toast("Target customer saved", "good"); render(); }
+        catch (err) { toast(err.message, "error"); }
+      }
+    });
+
+    (async () => {
+      try { S = await api("/api/settings"); }
+      catch (e) { panels.innerHTML = `<div class="glass p-8 text-center" style="color:var(--bad)">${esc(e.message)}</div>`; return; }
+      const h = location.hash.slice(1);
+      if (["integrations", "automation", "target"].includes(h)) {
+        active = h;
+        document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === h));
+      }
+      render();
+    })();
+  </script>
+</body>
+</html>

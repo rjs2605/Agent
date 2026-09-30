@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Company · LeadPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="nav"></div>
+  <main class="max-w-6xl mx-auto px-5 pb-24" id="main">
+    <div class="skeleton mt-14" style="height:220px"></div>
+    <div class="skeleton mt-6" style="height:320px"></div>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script src="/static/export.js"></script>
+  <script>
+    initNav("companies");
+    const id = location.pathname.split("/").pop();
+    const main = document.getElementById("main");
+    const TYPE = { funding: "💰 Funding", hiring: "📈 Hiring", leader: "👤 New leader", product: "🚀 New product", expansion: "📍 Expansion", customer_win: "🏆 Customer win", pricing: "🏷️ Pricing change", other: "⚡ Other" };
+    const SECTIONS = [
+      ["summary", "One-line summary"], ["what_they_do", "What they do + who they sell to"],
+      ["size_locations_funding", "Size, locations, funding"], ["recent_news", "Recent news / changes"],
+      ["hiring", "Hiring signals"], ["pain_points", "Likely pain points"],
+      ["opening_angle", "Best angle to open the conversation"], ["risks_unknowns", "Risks / unknowns"],
+    ];
+    const FACT_LABEL = {
+      what_they_sell: "What they sell", customers_industry: "Customers / industry", size_hint: "Size",
+      locations: "Locations", funding: "Funding", open_roles: "Open roles", tech_tools: "Tech / tools",
+      leaders: "Leaders", recent_launches: "Recent launches", pain_points: "Likely pain points",
+    };
+    let data = null, activeTab = "brief", timer = null, signalFilter = "all";
+
+    function briefTab() {
+      const b = data.brief?.brief;
+      if (!b) return empty("No brief yet", "Run research to build the company brief.");
+      return `<div class="grid md:grid-cols-2 gap-4">${SECTIONS.map(([k, title], i) => {
+        const lines = b[k] || [];
+        const wide = k === "summary" ? "md:col-span-2" : "";
+        return `<div class="glass p-5 reveal ${wide}" style="animation-delay:${i * 50}ms">
+          <div class="flex items-center gap-2"><span class="rank" style="width:24px;height:24px;font-size:.7rem;border-radius:8px">${i + 1}</span>
+          <h3 class="font-bold">${title}</h3></div>
+          ${lines.length ? `<ul class="mt-3 space-y-3">${lines.map((l) => `<li class="${k === "summary" ? "text-lg font-semibold" : "text-sm"}">${esc(l.text)}<div class="mt-0.5">${srcLink(l.source_url)}</div></li>`).join("")}</ul>`
+                         : `<p class="muted text-sm mt-3">Not found in sources.</p>`}
+        </div>`;
+      }).join("")}</div>
+      <p class="muted text-xs mt-4">Brief from ${fmtDate(data.brief.created_at)}. Every line links to its source.</p>`;
+    }
+
+    function signalsTab() {
+      const all = data.signals;
+      const list = all.filter((s) => signalFilter === "all" || (signalFilter === "signal" ? s.is_signal : !s.is_signal));
+      const nS = all.filter((s) => s.is_signal).length;
+      return `<div class="flex flex-wrap items-center gap-2 mb-4">
+          ${[["all", `All (${all.length})`], ["signal", `Signals (${nS})`], ["noise", `Noise (${all.length - nS})`]]
+            .map(([k, l]) => `<button class="btn ${signalFilter === k ? "btn-primary" : ""}" data-filter="${k}" style="padding:.35rem .8rem;font-size:.8rem">${l}</button>`).join("")}
+        </div>
+        ${list.length ? `<div class="space-y-3">${list.map((s, i) => `
+          <div class="glass p-4 flex gap-4 items-start reveal" style="animation-delay:${i * 40}ms;${s.is_signal ? "border-color:rgba(52,211,153,.3)" : "opacity:.75"}">
+            <span class="badge ${s.is_signal ? "badge-high" : "badge-info"}">${s.is_signal ? "SIGNAL" : "noise"}</span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold">${TYPE[s.type] || s.type}</div>
+              <div class="text-sm mt-0.5">${esc(s.description)}</div>
+              <div class="muted text-xs mt-1">${fmtDate(s.event_date || s.detected_at)} · ${daysAgo(s.event_date || s.detected_at)} · ${srcLink(s.source_url)}</div>
+            </div></div>`).join("")}</div>`
+          : `<p class="muted text-sm">No items here yet.</p>`}
+
+        <div class="glass p-5 mt-8">
+          <h3 class="font-bold">Compare with older info (demo)</h3>
+          <p class="muted text-sm mt-1">Paste what the company looked like before (old About page, old news, etc.). It is saved as an older snapshot; the next research run compares today's facts against it and marks each change as signal or noise.</p>
+          <textarea id="oldinfo" rows="5" class="mt-3" placeholder="e.g. 'Acme has 80 employees, offices in Pune. Raised seed round in 2023. Sells billing software to clinics.'"></textarea>
+          <div class="flex flex-wrap items-center gap-3 mt-3">
+            <button id="save-old" class="btn btn-primary">Save old info &amp; re-research</button>
+            <span class="muted text-xs">${data.manual_snapshots.length ? `${data.manual_snapshots.length} older snapshot(s) pasted` : ""} · ${data.snapshot_count} snapshots total</span>
+          </div>
+        </div>`;
+    }
+
+    function peopleTab() {
+      if (!data.contacts.length) return empty("No people yet", "Run research to find the right person.");
+      return `<div class="grid md:grid-cols-2 gap-4">${data.contacts.map((c, i) => `
+        <div class="card glass p-6 reveal" style="animation-delay:${i * 80}ms">
+          <div class="flex items-center justify-between">
+            <span class="badge ${c.rank === 1 ? "badge-high" : "badge-info"}">${c.rank === 1 ? "First choice" : "Backup"}</span>
+            ${confBadge(c.confidence)}
+          </div>
+          <div class="flex items-center gap-4 mt-4">
+            <div class="rank" style="width:52px;height:52px;border-radius:16px;font-size:1.1rem">${esc((c.name || "?").split(" ").map((w) => w[0]).slice(0, 2).join(""))}</div>
+            <div><div class="text-lg font-bold">${esc(c.name || "Name not found")}</div><div class="muted text-sm">${esc(c.title || "")}</div></div>
+          </div>
+          <p class="text-sm mt-4">${esc(c.reason)}</p>
+          ${c.profile_url ? `<div class="mt-3">${srcLink(c.profile_url, "LinkedIn profile")}</div>` : ""}
+        </div>`).join("")}</div>`;
+    }
+
+    function messageTab() {
+      const m = data.message;
+      if (!m) return empty("No message yet", "Run research to write a personal message.");
+      const words = m.body.split(/\s+/).filter(Boolean).length;
+      return `<div class="glass p-6 reveal">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div><div class="muted text-xs uppercase tracking-wider font-bold">Subject</div><div class="text-lg font-bold mt-1">${esc(m.subject)}</div></div>
+          <button id="copy-msg" class="btn btn-primary">Copy message</button>
+        </div>
+        <div class="message-box mt-5 p-5 rounded-2xl" style="background:rgba(0,0,0,.25);border:1px solid var(--line)">${esc(m.body)}</div>
+        <div class="flex flex-wrap gap-2 mt-4">
+          <span class="badge ${words < 90 ? "badge-high" : "badge-low"}">${words} words</span>
+          <span class="badge badge-info">Trigger: ${esc(m.trigger_used)}</span>
+        </div></div>`;
+    }
+
+    function sourcesTab() {
+      const snap = data.snapshot;
+      if (!snap) return empty("No sources yet", "Run research to collect sources.");
+      const facts = snap.facts || {};
+      const rows = Object.keys(FACT_LABEL).map((k) => {
+        const f = facts[k];
+        if (!f || !f.items.length) return `<tr><td class="font-semibold">${FACT_LABEL[k]}</td><td colspan="3" class="muted">Not found</td></tr>`;
+        const chosen = f.items[0];
+        const others = f.items.slice(1);
+        return `<tr><td class="font-semibold align-top">${FACT_LABEL[k]}${f.conflict ? `<div class="mt-1"><span class="badge badge-conflict">⚠ Conflicting</span></div>` : ""}</td>
+          <td class="align-top"><div>${esc(chosen.value)}</div>
+            ${others.length ? `<details class="mt-1"><summary class="muted text-xs cursor-pointer">${f.conflict ? "Other values" : `+${others.length} more`}</summary>
+              <div class="mt-2 space-y-2">${others.map((o) => `<div class="text-sm">${esc(o.value)} ${confBadge(o.confidence)}<div>${srcLink(o.source_url)} <span class="muted text-xs">${o.source_type}${o.date ? " · " + fmtDate(o.date) : ""}</span></div></div>`).join("")}</div></details>` : ""}</td>
+          <td class="align-top">${srcLink(chosen.source_url)}<div class="muted text-xs">${chosen.source_type}${chosen.date ? " · " + fmtDate(chosen.date) : ""}</div></td>
+          <td class="align-top">${confBadge(chosen.confidence)}</td></tr>`;
+      }).join("");
+      const pages = Object.entries(snap.raw_pages || {});
+      const news = snap.news || [];
+      return `<div class="glass overflow-x-auto reveal"><table><thead><tr><th>Fact</th><th>Value (best source first)</th><th>Source</th><th>Confidence</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="muted text-xs mt-3">Source priority: company website › recent news › directories › AI inference. Newer date wins at the same level. High = official or 2+ sources agree · Medium = one good source · Low = old, directory-only or inferred.</p>
+        <div class="grid md:grid-cols-2 gap-4 mt-6">
+          <div class="glass p-5 reveal" style="animation-delay:80ms"><h3 class="font-bold">Pages read (${pages.length})</h3>
+            <ul class="mt-3 space-y-2">${pages.map(([k, p]) => `<li class="text-sm"><span class="badge badge-info mr-2">${esc(k)}</span>${srcLink(p.url)} <span class="muted text-xs">${p.chars} chars</span></li>`).join("")}</ul></div>
+          <div class="glass p-5 reveal" style="animation-delay:140ms"><h3 class="font-bold">News found (${news.length})</h3>
+            <ul class="mt-3 space-y-3">${news.map((n) => `<li class="text-sm">${esc(n.title)}<div>${srcLink(n.url)} <span class="muted text-xs">${n.published_date ? fmtDate(n.published_date) : "no date"}</span></div></li>`).join("") || `<li class="muted text-sm">No news found.</li>`}</ul></div>
+        </div>`;
+    }
+
+    function empty(t, s) {
+      return `<div class="glass p-12 text-center reveal"><div class="orb" style="width:60px;height:60px"></div><div class="font-bold mt-5">${t}</div><div class="muted text-sm mt-1">${s}</div></div>`;
+    }
+
+    const TABS = [["brief", "Brief", briefTab], ["signals", "Signals", signalsTab], ["people", "People", peopleTab], ["message", "Message", messageTab], ["sources", "Sources", sourcesTab]];
+
+    function render(first) {
+      const c = data.company, s = data.score;
+      const busy = ["queued", "researching"].includes(c.status);
+      main.innerHTML = `
+        <section class="glass p-6 sm:p-8 mt-10 ${first ? "reveal" : ""}">
+          <div class="flex flex-wrap items-start gap-6">
+            <div class="flex-1 min-w-[240px]">
+              <a href="/companies" class="muted text-sm">← All companies</a>
+              <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-2">${esc(c.name || c.website)}</h1>
+              <div class="flex flex-wrap items-center gap-2 mt-2">
+                <a class="muted text-sm" href="${esc(c.website)}" target="_blank" rel="noopener">${esc(c.website.replace("https://", ""))} ↗</a>
+                ${statusBadge(c.status)}
+              </div>
+              ${c.status === "failed" && c.last_error ? `<div class="text-sm mt-2" style="color:var(--bad)">${esc(c.last_error)}</div>` : ""}
+              <div class="flex flex-wrap gap-2 mt-5">
+                <button id="research" class="btn btn-primary" ${busy ? "disabled" : ""}>${busy ? "Researching… (1-2 min)" : "↻ Run research"}</button>
+                <button id="pause" class="btn">${c.paused ? "▶ Resume" : "⏸ Pause"}</button>
+                <span class="row-actions"><button id="export" class="btn">⬇ Export ▾</button></span>
+                <button id="delete" class="btn btn-bad">🗑 Delete</button>
+              </div>
+              ${c.paused ? `<div class="banner banner-warn mt-3">This company is paused: it is skipped by research and the daily automation until you resume it.</div>` : ""}
+            </div>
+            ${s ? `<div class="flex flex-wrap items-center gap-4 sm:gap-6">
+              ${scoreRing(s.total)}
+              <div class="space-y-2 text-xs">
+                <div class="flex items-center gap-2"><span class="w-20 muted">Fit</span><div class="meter w-16 sm:w-28"><i data-w="${(s.fit / 40) * 100}" style="background:#7c5cff"></i></div><b>${s.fit}/40</b></div>
+                <div class="flex items-center gap-2"><span class="w-20 muted">Timing</span><div class="meter w-16 sm:w-28"><i data-w="${(s.timing / 40) * 100}" style="background:#22d3ee"></i></div><b>${s.timing}/40</b></div>
+                <div class="flex items-center gap-2"><span class="w-20 muted">Reachability</span><div class="meter w-16 sm:w-28"><i data-w="${(s.reachability / 20) * 100}" style="background:#34d399"></i></div><b>${s.reachability}/20</b></div>
+              </div></div>` : ""}
+          </div>
+          ${s ? `<div class="mt-6 pt-5" style="border-top:1px solid var(--line)"><div class="text-xs font-bold uppercase tracking-wider muted">Why this score</div>
+            <ul class="mt-3 grid md:grid-cols-2 gap-x-6 gap-y-1.5">${(s.reasons || []).map((r) => `<li class="text-sm flex gap-2"><span style="color:#a5b4fc">•</span>${esc(r)}</li>`).join("")}</ul></div>` : ""}
+        </section>
+        <div class="tabs mt-8 ${first ? "fade-in" : ""}" id="tabs"><div class="tab-ink" id="ink"></div>
+          ${TABS.map(([k, l]) => `<button class="tab ${k === activeTab ? "active" : ""}" data-tab="${k}">${l}</button>`).join("")}</div>
+        <div class="mt-6">${TABS.map(([k, , fn]) => `<div class="panel ${k === activeTab ? "active" : ""}" data-panel="${k}">${fn()}</div>`).join("")}</div>`;
+      animateRings(main); animateMeters(main); attachSpotlight(main); moveInk();
+      clearTimeout(timer);
+      if (busy) timer = setTimeout(load, 5000);
+    }
+
+    function moveInk() {
+      const t = main.querySelector(".tab.active"), ink = document.getElementById("ink");
+      if (t && ink) { ink.style.left = t.offsetLeft + "px"; ink.style.width = t.offsetWidth + "px"; }
+    }
+    window.addEventListener("resize", moveInk);
+
+    main.addEventListener("click", async (e) => {
+      const tab = e.target.closest("[data-tab]");
+      if (tab) {
+        activeTab = tab.dataset.tab;
+        main.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+        main.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === activeTab));
+        moveInk(); animateMeters(main); return;
+      }
+      const f = e.target.closest("[data-filter]");
+      if (f) {
+        signalFilter = f.dataset.filter;
+        main.querySelector('[data-panel="signals"]').innerHTML = signalsTab(); return;
+      }
+      if (e.target.id === "export") {
+        e.stopPropagation();
+        document.querySelectorAll(".menu").forEach((m) => m.remove());
+        const m = document.createElement("div");
+        m.className = "menu";
+        m.innerHTML = `<div class="label">Download as</div><button data-v="csv">CSV (.csv)</button><button data-v="xlsx">Excel (.xlsx)</button><button data-v="pdf">PDF report (.pdf)</button>`;
+        e.target.parentElement.appendChild(m);
+        m.onclick = (ev) => { const b = ev.target.closest("[data-v]"); if (b) { m.remove(); runExport(b.dataset.v, [id], data.company.name || data.company.website); } };
+        setTimeout(() => document.addEventListener("click", function close(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener("click", close); } }), 0);
+        return;
+      }
+      if (e.target.id === "pause") {
+        const p = !data.company.paused;
+        try { await api(`/api/companies/${id}/pause`, { method: "POST", body: { paused: p } }); toast(p ? "Paused" : "Resumed", "good"); lastStatus = null; load(); }
+        catch (err) { toast(err.message, "error"); }
+        return;
+      }
+      if (e.target.id === "delete") {
+        const label = data.company.name || data.company.website;
+        if (!(await confirmBox(`Delete ${label}?`, "The company and everything saved for it (brief, signals, people, messages) will be deleted. This cannot be undone.", "Delete", true))) return;
+        try { await api(`/api/companies/${id}`, { method: "DELETE" }); toast("Deleted", "good"); setTimeout(() => (location.href = "/companies"), 500); }
+        catch (err) { toast(err.message, "error"); }
+        return;
+      }
+      if (e.target.id === "research") {
+        e.target.disabled = true;
+        e.target.textContent = "Researching… (1-2 min)";
+        try {
+          const run = api(`/api/companies/${id}/research`, { method: "POST" });
+          toast("Research started");
+          setTimeout(load, 1000);
+          await run;
+          load();
+        }
+        catch (err) { toast(err.message, "error"); e.target.disabled = false; }
+      }
+      if (e.target.id === "copy-msg") copyText(`Subject: ${data.message.subject}\n\n${data.message.body}`, e.target);
+      if (e.target.id === "save-old") {
+        const text = document.getElementById("oldinfo").value.trim();
+        if (text.length < 30) return toast("Paste a few lines of older info", "error");
+        e.target.disabled = true; e.target.textContent = "Saving…";
+        try {
+          await api(`/api/companies/${id}/old-info`, { method: "POST", body: { text } });
+          const run = api(`/api/companies/${id}/research`, { method: "POST" });
+          toast("Old info saved, research started", "good");
+          setTimeout(load, 1000);
+          await run;
+          load();
+        } catch (err) { toast(err.message, "error"); e.target.disabled = false; e.target.textContent = "Save old info & re-research"; }
+      }
+    });
+
+    let lastStatus = null;
+    async function load(first = false) {
+      try { data = await api(`/api/companies/${id}`); }
+      catch (e) { main.innerHTML = empty("Could not load", esc(e.message)); return; }
+      document.title = `${data.company.name || data.company.website} · LeadPulse`;
+      if (lastStatus && lastStatus !== data.company.status) {
+        if (data.company.status === "researched") toast("Research finished", "good");
+        if (data.company.status === "failed") toast("Research failed", "error");
+      }
+      const changed = first || lastStatus !== data.company.status;
+      lastStatus = data.company.status;
+      if (changed) render(first);
+      else { clearTimeout(timer); if (["queued", "researching"].includes(data.company.status)) timer = setTimeout(load, 5000); }
+    }
+    load(true);
+  </script>
+</body>
+</html>

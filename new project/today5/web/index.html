@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Today · LeadPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="nav"></div>
+
+  <main class="max-w-6xl mx-auto px-5 pb-24">
+    <header class="pt-14 pb-10 fade-in">
+      <p id="today-date" class="muted text-sm font-semibold tracking-wide uppercase"></p>
+      <h1 class="text-5xl sm:text-6xl font-extrabold tracking-tight mt-2"><span class="gradient-text">Today's top leads</span></h1>
+      <p class="muted mt-3 max-w-2xl">At most 5 companies worth contacting today. Each one has a real signal from the last 30 days (funding, hiring, a new leader…), the right person to contact and a ready-to-send message.</p>
+      <div class="flex flex-wrap gap-2 mt-4 text-xs">
+        <span class="chip">① Read <b>Why now</b></span><span class="chip">② Copy the message</span><span class="chip">③ Press <b>Done</b>, <b>Snooze</b> or <b>Not relevant</b>: the next lead moves up</span>
+      </div>
+    </header>
+
+    <section id="cards" class="grid gap-5"></section>
+
+    <div class="mt-10 flex justify-center fade-in">
+      <a href="/companies" class="btn">See all companies →</a>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>
+    initNav("today");
+    document.getElementById("today-date").textContent = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+    const TYPE = { funding: "💰 Funding", hiring: "📈 Hiring", leader: "👤 New leader", product: "🚀 New product", expansion: "📍 Expansion", customer_win: "🏆 Customer win", pricing: "🏷️ Pricing change", other: "⚡ Signal" };
+    const cardsEl = document.getElementById("cards");
+    let shownIds = new Set();
+
+    function skeletons() {
+      cardsEl.innerHTML = Array.from({ length: 3 }, () => `<div class="skeleton" style="height:230px"></div>`).join("");
+    }
+
+    function cardHtml(c, i, isNew) {
+      const who = c.who;
+      const msg = c.message;
+      const whoHtml = who
+        ? `<div class="font-semibold">${esc(who.name || "Name not found")}</div>
+           <div class="muted text-sm">${esc(who.title || "")}</div>
+           ${who.profile_url ? `<div class="mt-1">${srcLink(who.profile_url, "LinkedIn profile")}</div>` : ""}`
+        : `<div class="muted">No contact found</div>`;
+      return `<article class="card glass p-6 ${isNew ? "reveal" : ""}" style="animation-delay:${isNew ? i * 90 : 0}ms" data-id="${c.company.id}">
+        <div class="flex items-start gap-4">
+          <div class="rank">${i + 1}</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <a href="/companies/${c.company.id}" class="text-xl font-bold hover:underline">${esc(c.company.name || c.company.website)}</a>
+              ${confBadge(c.confidence)}
+            </div>
+            <a class="muted text-sm" href="${esc(c.company.website)}" target="_blank" rel="noopener">${esc(c.company.website.replace("https://", ""))}</a>
+          </div>
+          ${scoreRing(c.score.total)}
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-4 mt-5">
+          <div class="rounded-2xl p-4" style="background:rgba(124,92,255,.08);border:1px solid rgba(124,92,255,.25)">
+            <div class="text-xs font-bold tracking-wider uppercase" style="color:#c4b5fd">Why now</div>
+            <div class="text-sm font-semibold mt-2">${TYPE[c.why_now.type] || TYPE.other}</div>
+            <div class="text-sm mt-1">${esc(c.why_now.description)}</div>
+            <div class="flex flex-wrap items-center gap-2 mt-2 text-xs muted">${fmtDate(c.why_now.date)} · ${daysAgo(c.why_now.date)}</div>
+            <div class="mt-1">${srcLink(c.why_now.source_url)}</div>
+          </div>
+          <div class="rounded-2xl p-4" style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.22)">
+            <div class="text-xs font-bold tracking-wider uppercase" style="color:#67e8f9">Who</div>
+            <div class="mt-2">${whoHtml}</div>
+            ${who?.confidence ? `<div class="mt-2">${confBadge(who.confidence)}</div>` : ""}
+          </div>
+          <div class="rounded-2xl p-4" style="background:rgba(255,255,255,.03);border:1px solid var(--line)">
+            <div class="flex items-center justify-between">
+              <div class="text-xs font-bold tracking-wider uppercase muted">Message</div>
+              ${msg ? `<button class="btn" style="padding:.3rem .6rem;font-size:.75rem" data-copy="${c.company.id}">Copy</button>` : ""}
+            </div>
+            ${msg ? `<div class="text-sm font-semibold mt-2">${esc(msg.subject)}</div>
+                     <div class="text-sm muted mt-1" style="display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden">${esc(msg.body)}</div>`
+                  : `<div class="muted text-sm mt-2">No message yet</div>`}
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 mt-5">
+          <button class="btn btn-good" data-act="done">✓ Done</button>
+          <button class="btn btn-warn" data-act="snooze">⏰ Snooze 7 days</button>
+          <button class="btn btn-bad" data-act="not_relevant">✕ Not relevant</button>
+          <a class="btn ml-auto" href="/companies/${c.company.id}">Full view →</a>
+        </div>
+      </article>`;
+    }
+
+    function emptyHtml() {
+      return `<div class="glass p-12 text-center reveal">
+        <div class="orb"></div>
+        <h2 class="text-2xl font-bold mt-6">Nothing worth acting on today</h2>
+        <p class="muted mt-2 max-w-md mx-auto">No company has a real signal from the last 30 days that you haven't handled yet. LeadPulse never fills this list with weak leads. Add more companies, or let the daily automation find new signals.</p>
+        <a href="/companies" class="btn btn-primary mt-6">Add or research companies</a>
+      </div>`;
+    }
+
+    let current = [];
+    async function load(first = false) {
+      if (first) skeletons();
+      try {
+        current = await api("/api/today");
+      } catch (e) {
+        cardsEl.innerHTML = `<div class="glass p-8 text-center"><div class="font-semibold">Could not load</div><div class="muted text-sm mt-1">${esc(e.message)}</div></div>`;
+        return;
+      }
+      if (!current.length) { cardsEl.innerHTML = emptyHtml(); shownIds = new Set(); return; }
+      cardsEl.innerHTML = current.map((c, i) => cardHtml(c, i, first || !shownIds.has(c.company.id))).join("");
+      shownIds = new Set(current.map((c) => c.company.id));
+      animateRings(cardsEl);
+      attachSpotlight(cardsEl);
+    }
+
+    cardsEl.addEventListener("click", async (e) => {
+      const copyBtn = e.target.closest("[data-copy]");
+      if (copyBtn) {
+        const c = current.find((x) => x.company.id === copyBtn.dataset.copy);
+        return copyText(`Subject: ${c.message.subject}\n\n${c.message.body}`, copyBtn);
+      }
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      const card = btn.closest(".card");
+      card.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      try {
+        await api("/api/actions", { method: "POST", body: { company_id: card.dataset.id, action: btn.dataset.act } });
+        const label = { done: "Marked done", snooze: "Snoozed for 7 days", not_relevant: "Marked not relevant" }[btn.dataset.act];
+        toast(label, "good");
+        card.style.maxHeight = card.offsetHeight + "px";
+        card.classList.add("leaving");
+        setTimeout(() => load(false), 520);
+      } catch (err) {
+        toast(err.message, "error");
+        card.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      }
+    });
+
+    load(true);
+  </script>
+</body>
+</html>

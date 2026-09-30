@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Companies · LeadPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="nav"></div>
+
+  <main class="max-w-6xl mx-auto px-5 pb-24">
+    <header class="pt-12 pb-8 fade-in">
+      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight"><span class="gradient-text">Companies</span></h1>
+      <p class="muted mt-3 max-w-2xl">Add company websites here. LeadPulse reads each website and recent news, scores the company, finds the right person and writes a message, one company at a time. The best ones show up on the <a href="/" class="underline">Today</a> page.</p>
+    </header>
+
+    <!-- Add companies -->
+    <section class="glass p-6 reveal">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <h2 class="font-bold text-lg">Add companies ${""}</h2>
+        <button id="sample" class="btn btn-sm">⬇ Sample CSV</button>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4 mt-4">
+        <div>
+          <label class="field-label" for="urls">Paste websites (one per line)</label>
+          <textarea id="urls" rows="5" placeholder="example.com&#10;https://another-company.in"></textarea>
+        </div>
+        <div>
+          <span class="field-label">Or upload a CSV file</span>
+          <label id="drop" class="drop block" style="height:calc(100% - 1.6rem);min-height:120px">
+            <input id="csv" type="file" accept=".csv,.txt" class="hidden" />
+            <div class="text-3xl">📄</div>
+            <div class="font-semibold mt-1">Drop a CSV here or click to choose</div>
+            <div class="muted text-xs mt-1">Any column with website addresses works. 100+ companies are fine.</div>
+          </label>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 mt-4">
+        <button id="add" class="btn btn-primary">+ Add companies</button>
+        <label class="flex items-center gap-2 text-sm muted"><input id="autoresearch" type="checkbox" checked /> Start research right after adding</label>
+      </div>
+    </section>
+
+    <!-- Status + bulk actions -->
+    <section class="mt-8 reveal" style="animation-delay:100ms">
+      <div id="banners" class="space-y-2 mb-4"></div>
+      <div class="glass p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="font-bold">Research progress <span id="help-progress"></span></div>
+            <div id="counts" class="muted text-sm mt-0.5"></div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="pause-all" class="btn"></button>
+            <button id="research-new" class="btn">▶ Research new + failed</button>
+            <button id="research-all" class="btn">↻ Research all again</button>
+            <div class="row-actions">
+              <button id="export-all" class="btn">⬇ Export all ▾</button>
+            </div>
+          </div>
+        </div>
+        <div class="progress mt-4"><i id="bar"></i></div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3 mt-6 mb-3">
+        <div class="flex-1 min-w-[200px]"><input id="search" type="search" placeholder="Search by name or website…" /></div>
+        <select id="filter" style="width:auto">
+          <option value="all">All statuses</option><option value="researched">Researched</option>
+          <option value="queued">Waiting in queue</option><option value="researching">Researching now</option>
+          <option value="failed">Failed</option><option value="new">New</option><option value="paused">Paused</option>
+        </select>
+      </div>
+
+      <div class="glass overflow-x-auto">
+        <table>
+          <thead><tr><th>#</th><th>Company</th><th>Status</th><th>Score</th><th>Fit / Timing / Reach</th><th>Signals</th><th class="text-right">Actions</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="7"><div class="skeleton" style="height:120px"></div></td></tr></tbody>
+        </table>
+      </div>
+      <p class="muted text-xs mt-3">Research runs one company at a time, about 1-2 minutes each. Order: the order you added them (a company you press ↻ on goes first).</p>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script src="/static/export.js"></script>
+  <script>
+    initNav("companies");
+    document.querySelector("h2").innerHTML = "Add companies " + help("Only the website is needed. Duplicates are skipped automatically. Bad addresses are listed so you can fix them.");
+    document.getElementById("help-progress").innerHTML = help("Researched = finished. Waiting = in the queue. Paused companies are skipped until you resume them. Pause all stops everything, including the daily automation.");
+
+    const rowsEl = document.getElementById("rows");
+    let list = [], summary = {}, SERVERLESS = false, draining = false, timer = null, firstLoad = true, prevStatus = {};
+    const BUSY = ["queued", "researching"];
+
+    // ---------- menus ----------
+    function openMenu(anchor, html, onPick) {
+      document.querySelectorAll(".menu").forEach((m) => m.remove());
+      const m = document.createElement("div");
+      m.className = "menu";
+      m.innerHTML = html;
+      anchor.parentElement.appendChild(m);
+      m.addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if (b) { m.remove(); onPick(b.dataset.v); } });
+      setTimeout(() => document.addEventListener("click", function close(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener("click", close); } }), 0);
+    }
+    const EXPORT_MENU = `<div class="label">Download as</div><button data-v="csv">CSV (.csv)</button><button data-v="xlsx">Excel (.xlsx)</button><button data-v="pdf">PDF (.pdf)</button>`;
+
+    // ---------- rendering ----------
+    function bar(v, max, color) {
+      return `<div class="meter" style="width:70px"><i data-w="${Math.round((v / max) * 100)}" style="background:${color}"></i></div>`;
+    }
+
+    function renderBanners() {
+      const b = [];
+      if (summary.paused_all) b.push(`<div class="banner banner-warn">⏸ Research is paused for all companies (also the daily automation). Press <b>Resume all</b> to continue.</div>`);
+      if (summary.ai_blocked_until) b.push(`<div class="banner banner-warn">⏳ The AI providers reached their free limit. Research continues automatically after ${new Date(summary.ai_blocked_until).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}. Add a backup key in <a class="underline" href="/settings">Settings → Integrations</a> to go faster.</div>`);
+      if (SERVERLESS && (summary.queued || summary.researching)) b.push(`<div class="banner banner-info">ℹ Keep this page open to keep researching. If you close it, the daily automation continues where it stopped.</div>`);
+      document.getElementById("banners").innerHTML = b.join("");
+    }
+
+    function render() {
+      const s = summary;
+      const done = s.researched || 0, total = s.total || 0;
+      document.getElementById("counts").innerHTML = `<b>${done}</b> of <b>${total}</b> researched · ${s.queued || 0} waiting · ${s.researching || 0} researching now · ${s.failed || 0} failed · ${s.paused || 0} paused`;
+      document.getElementById("bar").style.width = total ? `${Math.round((done / total) * 100)}%` : "0%";
+      const pa = document.getElementById("pause-all");
+      pa.innerHTML = s.paused_all ? "▶ Resume all" : "⏸ Pause all";
+      pa.className = "btn " + (s.paused_all ? "btn-primary" : "btn-warn");
+      renderBanners();
+
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      const f = document.getElementById("filter").value;
+      const shown = list.filter((c) => (!q || (c.name || "").toLowerCase().includes(q) || c.website.includes(q))
+        && (f === "all" || (f === "paused" ? c.paused : c.status === f)));
+
+      rowsEl.innerHTML = shown.length ? shown.map((c, i) => {
+        const sc = c.score;
+        const busy = BUSY.includes(c.status);
+        return `<tr class="${firstLoad ? "reveal" : ""}" style="animation-delay:${firstLoad ? Math.min(i, 20) * 35 : 0}ms" data-id="${c.id}">
+          <td class="muted">${i + 1}</td>
+          <td><a href="/companies/${c.id}" class="font-semibold hover:underline">${esc(c.name || "-")}</a>
+              <div class="muted text-xs">${esc(c.website.replace("https://", ""))}</div>
+              ${c.last_error ? `<div class="text-xs mt-1" style="color:${c.status === "failed" ? "var(--bad)" : "var(--warn)"}">${esc(c.last_error)}</div>` : ""}</td>
+          <td>${statusBadge(c.status, c.paused)}${c.paused ? `<div class="mt-1">${statusBadge(c.status)}</div>` : ""}</td>
+          <td class="text-lg font-extrabold">${sc ? Math.round(sc.total) : "<span class='muted text-sm'>-</span>"}</td>
+          <td>${sc ? `<div class="flex flex-col gap-1.5">${bar(sc.fit, 40, "#7c5cff")}${bar(sc.timing, 40, "#22d3ee")}${bar(sc.reachability, 20, "#34d399")}</div>
+                    <div class="muted text-xs mt-1">${sc.fit} / ${sc.timing} / ${sc.reachability}</div>` : ""}</td>
+          <td>${c.signal_count ? `<span class="badge badge-info">${c.signal_count} real</span>` : "<span class='muted text-sm'>0</span>"}</td>
+          <td class="text-right whitespace-nowrap">
+            <button class="btn btn-sm" data-act="research" title="Research this company first" ${c.status === "researching" ? "disabled" : ""}>↻</button>
+            <button class="btn btn-sm" data-act="pause" title="${c.paused ? "Resume" : "Pause"} this company">${c.paused ? "▶" : "⏸"}</button>
+            <span class="row-actions"><button class="btn btn-sm" data-act="export" title="Export this company">⬇ ▾</button></span>
+            <a class="btn btn-sm" href="/companies/${c.id}">Open</a>
+            <button class="btn btn-sm btn-bad" data-act="delete" title="Delete this company">🗑</button>
+          </td></tr>`;
+      }).join("") : `<tr><td colspan="7" class="text-center py-12">${list.length ? `<div class="muted">No companies match your search.</div>` : `<div class="orb" style="width:60px;height:60px"></div><div class="mt-4 font-semibold">No companies yet</div><div class="muted text-sm">Paste some websites or upload a CSV above.</div>`}</td></tr>`;
+      firstLoad = false;
+      animateMeters(rowsEl);
+    }
+
+    async function load() {
+      let data;
+      try { data = await api("/api/companies"); }
+      catch (e) { rowsEl.innerHTML = `<tr><td colspan="7" class="text-center py-8" style="color:var(--bad)">${esc(e.message)}</td></tr>`; return; }
+      list = data.companies; summary = data.summary; SERVERLESS = summary.serverless;
+      list.forEach((c) => {
+        if (prevStatus[c.id] && prevStatus[c.id] !== c.status) {
+          if (c.status === "researched") toast(`${c.name || c.website} researched`, "good");
+          if (c.status === "failed") toast(`${c.name || c.website} failed`, "error");
+        }
+        prevStatus[c.id] = c.status;
+      });
+      render();
+      clearTimeout(timer);
+      if (summary.queued || summary.researching) timer = setTimeout(load, 5000);
+      if (SERVERLESS && !draining && summary.queued && !summary.paused_all && !summary.ai_blocked_until) drain();
+    }
+
+    // On Vercel there is no background worker: this page researches the queue one company per request.
+    async function drain() {
+      draining = true;
+      try {
+        while (true) {
+          const r = await api("/api/run-next", { method: "POST" });
+          if (r.state === "done" || r.state === "failed") { await load(); continue; }
+          if (r.state === "busy") { await new Promise((ok) => setTimeout(ok, 8000)); continue; }
+          if (r.state === "limited") toast("AI limit reached - research continues later", "error");
+          break;
+        }
+      } catch (e) { toast(e.message, "error"); }
+      draining = false;
+      load();
+    }
+
+    // ---------- adding companies (paste or CSV) ----------
+    function parseCsv(text) {
+      const out = [];
+      text.split(/\r?\n/).forEach((line) => {
+        line.split(/[,;\t]/).forEach((cell) => {
+          const c = cell.trim().replace(/^"|"$/g, "").trim();
+          if (/^(https?:\/\/)?(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(c) && !/@/.test(c)) out.push(c);
+        });
+      });
+      return out;
+    }
+    function norm(u) { return u.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]; }
+
+    async function addUrls(urls) {
+      const research = document.getElementById("autoresearch").checked;
+      let added = 0, dup = 0, invalid = [];
+      for (let i = 0; i < urls.length; i += 1000) {
+        const r = await api("/api/companies", { method: "POST", body: { urls: urls.slice(i, i + 1000), research } });
+        added += r.added; dup += r.duplicates; invalid = invalid.concat(r.invalid);
+      }
+      toast(`Added ${added}${dup ? ` · ${dup} already there` : ""}${invalid.length ? ` · ${invalid.length} invalid` : ""}`, "good");
+      firstLoad = true;
+      await load();
+      return invalid;
+    }
+
+    function previewAndAdd(urls, source) {
+      const seen = new Set(), uniq = [];
+      urls.forEach((u) => { const k = norm(u); if (!seen.has(k)) { seen.add(k); uniq.push(u); } });
+      const existing = new Set(list.map((c) => norm(c.website)));
+      const fresh = uniq.filter((u) => !existing.has(norm(u)));
+      const wrap = document.createElement("div");
+      wrap.className = "modal-wrap";
+      wrap.innerHTML = `<div class="modal wide glass p-6">
+        <h3 class="text-lg font-bold">Preview: ${esc(source)}</h3>
+        <div class="flex flex-wrap gap-2 mt-3 text-sm">
+          <span class="badge badge-high">${fresh.length} new</span>
+          <span class="badge badge-info">${uniq.length - fresh.length} already added</span>
+          <span class="badge badge-info">${urls.length - uniq.length} duplicates in file</span>
+        </div>
+        <div class="mt-4 glass p-3" style="max-height:300px;overflow:auto">
+          ${fresh.slice(0, 300).map((u, i) => `<div class="text-sm py-1 flex gap-3"><span class="muted w-8 text-right">${i + 1}</span>${esc(u)}</div>`).join("") || `<div class="muted text-sm">Nothing new to add.</div>`}
+          ${fresh.length > 300 ? `<div class="muted text-xs mt-2">…and ${fresh.length - 300} more</div>` : ""}
+        </div>
+        <p class="muted text-xs mt-3">They will be researched in this order, one at a time (about 1-2 minutes each, limited by free AI quotas).</p>
+        <div class="flex justify-end gap-2 mt-5">
+          <button class="btn" data-no>Cancel</button>
+          <button class="btn btn-primary" data-yes ${fresh.length ? "" : "disabled"}>Add ${fresh.length} companies</button>
+        </div></div>`;
+      document.body.appendChild(wrap);
+      const close = () => { wrap.classList.add("out"); setTimeout(() => wrap.remove(), 200); };
+      wrap.querySelector("[data-no]").onclick = close;
+      wrap.querySelector("[data-yes]").onclick = async (e) => {
+        e.target.disabled = true; e.target.textContent = "Adding…";
+        try { await addUrls(fresh); close(); } catch (err) { toast(err.message, "error"); e.target.disabled = false; }
+      };
+    }
+
+    async function readCsvFile(f) {
+      const urls = parseCsv(await f.text());
+      if (!urls.length) return toast("No website addresses found in that file", "error");
+      previewAndAdd(urls, `${f.name} (${urls.length} websites found)`);
+    }
+    const drop = document.getElementById("drop");
+    document.getElementById("csv").addEventListener("change", (e) => { if (e.target.files[0]) readCsvFile(e.target.files[0]); e.target.value = ""; });
+    ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) readCsvFile(f); });
+
+    document.getElementById("add").onclick = () => {
+      const urls = document.getElementById("urls").value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+      if (!urls.length) return toast("Paste at least one website", "error");
+      previewAndAdd(urls, `${urls.length} pasted`);
+      document.getElementById("urls").value = "";
+    };
+    document.getElementById("sample").onclick = () => {
+      const csv = "company,website\nChaayos,chaayos.com\nFi Money,fi.money\nMokobara,mokobara.com\n";
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+      a.download = "leadpulse_sample.csv"; a.click();
+    };
+
+    // ---------- bulk actions ----------
+    document.getElementById("pause-all").onclick = async () => {
+      const pause = !summary.paused_all;
+      try { await api("/api/pause-all", { method: "POST", body: { paused: pause } }); toast(pause ? "All research paused" : "Research resumed", "good"); load(); }
+      catch (e) { toast(e.message, "error"); }
+    };
+    async function researchAll(onlyNew) {
+      if (!onlyNew && !(await confirmBox("Research all again?", "Every company will be researched again. This uses your free AI quota and can take a long time.", "Research all"))) return;
+      try { const r = await api("/api/research-all", { method: "POST", body: { only_new: onlyNew } }); toast(`${r.queued} companies added to the queue`, "good"); load(); }
+      catch (e) { toast(e.message, "error"); }
+    }
+    document.getElementById("research-new").onclick = () => researchAll(true);
+    document.getElementById("research-all").onclick = () => researchAll(false);
+    document.getElementById("export-all").onclick = (e) => { e.stopPropagation(); openMenu(e.currentTarget, EXPORT_MENU, (fmt) => runExport(fmt, null, "all companies")); };
+    document.getElementById("search").addEventListener("input", render);
+    document.getElementById("filter").addEventListener("change", render);
+
+    // ---------- row actions ----------
+    rowsEl.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-act]");
+      if (!b) return;
+      e.stopPropagation();
+      const id = b.closest("tr").dataset.id, c = list.find((x) => x.id === id);
+      const label = c.name || c.website;
+      if (b.dataset.act === "export") return openMenu(b, EXPORT_MENU, (fmt) => runExport(fmt, [id], label));
+      if (b.dataset.act === "delete") {
+        if (!(await confirmBox(`Delete ${label}?`, "The company and everything saved for it (brief, signals, people, messages) will be deleted. This cannot be undone.", "Delete", true))) return;
+        try { await api(`/api/companies/${id}`, { method: "DELETE" }); toast(`${label} deleted`, "good"); load(); } catch (err) { toast(err.message, "error"); }
+        return;
+      }
+      if (b.dataset.act === "pause") {
+        try { await api(`/api/companies/${id}/pause`, { method: "POST", body: { paused: !c.paused } }); toast(c.paused ? `${label} resumed` : `${label} paused`, "good"); load(); } catch (err) { toast(err.message, "error"); }
+        return;
+      }
+      if (b.dataset.act === "research") {
+        b.disabled = true;
+        try {
+          const run = api(`/api/companies/${id}/research`, { method: "POST" });
+          toast(`${label} moved to the front of the queue`);
+          setTimeout(load, 800);
+          const r = await run;
+          if (r.state === "busy") toast("Another company is being researched - this one is next");
+          if (r.state === "paused") toast("Research is paused (Pause all)", "error");
+          if (r.state === "limited") toast("AI limit reached - it will run later", "error");
+          load();
+        } catch (err) { toast(err.message, "error"); b.disabled = false; }
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

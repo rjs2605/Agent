@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Log in · LeadPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="min-h-screen grid place-items-center px-4">
+  <div id="bg"></div>
+  <main class="w-full max-w-md">
+    <div class="text-center reveal">
+      <div class="rank pulse-logo mx-auto" style="width:56px;height:56px;border-radius:18px" id="logo"></div>
+      <h1 class="text-4xl font-extrabold tracking-tight mt-5"><span class="gradient-text">LeadPulse</span></h1>
+      <p class="muted mt-2">Your 5 hottest leads, every morning.</p>
+    </div>
+    <form id="form" class="glass p-7 mt-8 reveal" style="animation-delay:120ms">
+      <label class="field-label" for="u">Username</label>
+      <input id="u" type="text" autocomplete="username" required />
+      <label class="field-label mt-4" for="p">Password</label>
+      <input id="p" type="password" autocomplete="current-password" required />
+      <div id="err" class="text-sm mt-3" style="color:var(--bad);min-height:1.2em"></div>
+      <button class="btn btn-primary w-full justify-center mt-2" id="go" style="padding:.8rem">Log in</button>
+    </form>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    document.getElementById("bg").innerHTML = backdrop();
+    document.getElementById("logo").innerHTML = LOGO.replace('width="18" height="18"', 'width="28" height="28"');
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById("go"), err = document.getElementById("err");
+      btn.disabled = true; btn.textContent = "Checking…"; err.textContent = "";
+      try {
+        await api("/api/login", { method: "POST", body: { username: document.getElementById("u").value.trim(), password: document.getElementById("p").value } });
+        location.href = "/";
+      } catch (ex) {
+        err.textContent = ex.message;
+        btn.disabled = false; btn.textContent = "Log in";
+        document.getElementById("form").animate([{ transform: "translateX(0)" }, { transform: "translateX(-8px)" }, { transform: "translateX(8px)" }, { transform: "translateX(0)" }], { duration: 300 });
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300,
+      "includeFiles": "{web/**,lib/**,app.py,config.py}"
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/index?__path=/$1" }
+  ],
+  "crons": [
+    { "path": "/api/cron/daily", "schedule": "30 2 * * *" }
+  ]
+}
